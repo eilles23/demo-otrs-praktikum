@@ -1,0 +1,90 @@
+version: '2'
+
+services:
+  mail:
+    image: tvial/docker-mailserver:latest
+    hostname: mail
+    domainname: itslab.local
+    container_name: mail-itslab
+    ports:
+    - "25:25"
+    - "143:143"
+    - "587:587"
+    - "993:993"
+    volumes:
+    - maildata:/var/mail
+    - mailstate:/var/mail-state
+    - ./config/:/tmp/docker-mailserver/
+    environment:
+    - ENABLE_SPAMASSASSIN=1
+    - ENABLE_CLAMAV=1
+    - ENABLE_FAIL2BAN=1
+    - ENABLE_POSTGREY=1
+    - ONE_DIR=1
+    - DMS_DEBUG=0
+    cap_add:
+    - NET_ADMIN
+    - SYS_PTRACE
+
+  browser:
+    build: ./firefox
+    environment:
+    - DISPLAY=$DISPLAY
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix
+  mailclient:
+    build: ./thunderbird
+    environment:
+    - DISPLAY=$DISPLAY
+    volumes:
+    - /tmp/.X11-unix:/tmp/.X11-unix
+  otrs:
+    image: juanluisbaptiste/otrs:latest
+    ports:
+    - "80:80"
+# If running behind a proxy container, expose the ports instead
+# and link the proxy container to this one.
+# expose:
+# - "80"
+    links:
+    - mariadb:mariadb
+    - mail:postfix
+    volumes_from:
+    - data-otrs
+    environment:
+     OTRS_HOSTNAME: otrs
+     OTRS_ADMIN_EMAIL: support@mail.itslab.local
+#OTRS_ORGANIZATION: "Your Company Inc"
+     OTRS_ROOT_PASSWORD: changeme
+     MYSQL_ROOT_PASSWORD: changeme
+     OTRS_DB_PASSWORD: changeme
+
+  mariadb:
+    image: juanluisbaptiste/otrs-mariadb:latest
+    expose:
+    - "3306"
+    volumes_from:
+    - data
+# env_file: otrs-setup.env
+    environment:
+     MYSQL_ROOT_PASSWORD: changeme
+  data:
+    image: centos/mariadb:latest
+    volumes:
+    - mysqldata:/var/lib/mysql
+    - "/etc/localtime:/etc/localtime:ro"
+    command: /bin/true
+  data-otrs:
+    image: juanluisbaptiste/otrs:latest
+    volumes:
+    - ./volumes/config:/opt/otrs/Kernel
+    - "./otrs/backup:/var/otrs/backups"
+    - "/etc/localtime:/etc/localtime:ro"
+    command: /bin/true
+
+volumes:
+  maildata:
+    driver: local
+  mailstate:
+    driver: local
+  mysqldata:
